@@ -29,12 +29,10 @@ jobs:
       - name: Check current version in Dockerfile
         id: check-version
         run: |
-          # Cherche la version actuelle dans le Dockerfile
-          if grep -q "RUN xcaddy build" Dockerfile; then
-            CURRENT_VERSION=$(grep "RUN xcaddy build" Dockerfile | grep -oP 'build \K[v0-9.]+')
-          elif grep -q "CADDY_VERSION=" Dockerfile; then
-            CURRENT_VERSION=$(grep "CADDY_VERSION=" Dockerfile | cut -d'=' -f2)
-          else
+          # Cherche la version actuelle dans le Dockerfile (format: RUN xcaddy build v2.9.1)
+          CURRENT_VERSION=$(grep "RUN xcaddy build" Dockerfile | awk '{print $3}')
+          
+          if [ -z "$CURRENT_VERSION" ]; then
             echo "Could not find current version in Dockerfile"
             exit 1
           fi
@@ -52,9 +50,10 @@ jobs:
           if [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
             echo "Updating Dockerfile from $CURRENT_VERSION to $LATEST_VERSION"
             
-            # Met à jour toutes les occurrences de la version
-            sed -i "s|build $CURRENT_VERSION|build $LATEST_VERSION|g" Dockerfile
-            sed -i "s|CADDY_VERSION=$CURRENT_VERSION|CADDY_VERSION=$LATEST_VERSION|g" Dockerfile
+            # Met à jour la ligne RUN xcaddy build
+            sed -i "s/RUN xcaddy build $CURRENT_VERSION/RUN xcaddy build $LATEST_VERSION/" Dockerfile
+            # Met à jour la ligne ENV CADDY_VERSION
+            sed -i "s/ENV CADDY_VERSION=$CURRENT_VERSION/ENV CADDY_VERSION=$LATEST_VERSION/" Dockerfile
             
             echo "updated=true" >> $GITHUB_OUTPUT
             echo "new-version=$LATEST_VERSION" >> $GITHUB_OUTPUT
