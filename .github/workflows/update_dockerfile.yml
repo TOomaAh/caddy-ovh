@@ -2,82 +2,95 @@ name: Update Caddy Version
 
 on:
   schedule:
-    - cron: '0 */12 * * *'  # Vérifie toutes les 12 heures
+    - cron: '0 */12 * * *'  # Vérifie toutes les 12 heures (correction: 5 étoiles)
   workflow_dispatch:  # Permet le déclenchement manuel
 
 jobs:
-  check-update:
+  check-and-update:
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.get-version.outputs.version }}
-      updated: ${{ steps.update-dockerfile.outputs.updated }}
+    permissions:
+      contents: write
+      packages: write
+      pull-requests: write
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get latest Caddy version
         id: get-version
         run: |
-          LATEST_VERSION=$(curl -s https://api.github.com/repos/caddyserver/caddy/releases | jq -r '[.[] | select(.prerelease == false)][0].tag_name')
+          LATEST_VERSION=$(curl -s https://api.github.com/repos/caddyserver/caddy/releases/latest | jq -r '.tag_name')
           echo "version=$LATEST_VERSION" >> $GITHUB_OUTPUT
           echo "Latest version: $LATEST_VERSION"
 
-      - name: Update Dockerfile
+      - name: Check current version in Dockerfile
+        id: check-version
+        run: |
+          # Cherche la version actuelle dans le Dockerfile
+          if grep -q "RUN xcaddy build" Dockerfile; then
+            CURRENT_VERSION=$(grep "RUN xcaddy build" Dockerfile | grep -oP 'build \K[v0-9.]+')
+          elif grep -q "CADDY_VERSION=" Dockerfile; then
+            CURRENT_VERSION=$(grep "CADDY_VERSION=" Dockerfile | cut -d'=' -f2)
+          else
+            echo "Could not find current version in Dockerfile"
+            exit 1
+          fi
+          
+          echo "current-version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+          echo "Latest version: ${{ steps.get-version.outputs.version }}"
+
+      - name: Update Dockerfile if needed
         id: update-dockerfile
         run: |
-          CURRENT_VERSION=$(grep "RUN xcaddy build" Dockerfile | cut -d' ' -f3)
+          CURRENT_VERSION="${{ steps.check-version.outputs.current-version }}"
           LATEST_VERSION="${{ steps.get-version.outputs.version }}"
           
           if [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
             echo "Updating Dockerfile from $CURRENT_VERSION to $LATEST_VERSION"
-            sed -i "s/build $CURRENT_VERSION/build $LATEST_VERSION/" Dockerfile
-            sed -i "s/CADDY_VERSION=$CURRENT_VERSION/CADDY_VERSION=$LATEST_VERSION/" Dockerfile
+            
+            # Met à jour toutes les occurrences de la version
+            sed -i "s|build $CURRENT_VERSION|build $LATEST_VERSION|g" Dockerfile
+            sed -i "s|CADDY_VERSION=$CURRENT_VERSION|CADDY_VERSION=$LATEST_VERSION|g" Dockerfile
+            
             echo "updated=true" >> $GITHUB_OUTPUT
+            echo "new-version=$LATEST_VERSION" >> $GITHUB_OUTPUT
           else
             echo "Version is already up to date"
             echo "updated=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create Pull Request
+      - name: Configure git
         if: steps.update-dockerfile.outputs.updated == 'true'
-        uses: peter-evans/create-pull-request@v5
-        with:
-          commit-message: "chore: update Caddy to ${{ steps.get-version.outputs.version }}"
-          title: "Update Caddy to ${{ steps.get-version.outputs.version }}"
-          body: |
-            Automated update of Caddy version to ${{ steps.get-version.outputs.version }}
-            
-            This PR was automatically created by the Caddy version update workflow.
-          branch: update-caddy-version
-          delete-branch: true
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
 
-  build-and-push:
-    needs: check-update
-    if: needs.check-update.outputs.updated == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+      - name: Commit and push changes
+        if: steps.update-dockerfile.outputs.updated == 'true'
+        run: |
+          git add Dockerfile
+          git commit -m "chore: update Caddy to ${{ steps.get-version.outputs.version }}"
+          git push
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: update-caddy-version
+      - name: Get current date
+        if: steps.update-dockerfile.outputs.updated == 'true'
+        id: date
+        run: echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
 
       - name: Log in to the Container registry
+        if: steps.update-dockerfile.outputs.updated == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get current date
-        id: date
-        run: echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
-
       - name: Extract metadata
+        if: steps.update-dockerfile.outputs.updated == 'true'
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -85,12 +98,33 @@ jobs:
           tags: |
             type=raw,value=latest
             type=raw,value=${{ steps.date.outputs.date }}
-            type=raw,value=${{ needs.check-update.outputs.version }}
+            type=raw,value=${{ steps.get-version.outputs.version }}
 
       - name: Build and push Docker image
+        if: steps.update-dockerfile.outputs.updated == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Create release
+        if: steps.update-dockerfile.outputs.updated == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.get-version.outputs.version }}
+          name: Caddy ${{ steps.get-version.outputs.version }}
+          body: |
+            🚀 **Mise à jour automatique de Caddy**
+            
+            Cette release contient la mise à jour vers Caddy ${{ steps.get-version.outputs.version }}.
+            
+            **Images Docker disponibles:**
+            - `ghcr.io/${{ github.repository }}:latest`
+            - `ghcr.io/${{ github.repository }}:${{ steps.date.outputs.date }}`
+            - `ghcr.io/${{ github.repository }}:${{ steps.get-version.outputs.version }}`
+            
+            **Changements:**
+            - Mise à jour de Caddy vers la version ${{ steps.get-version.outputs.version }}
+          generate_release_notes: false
