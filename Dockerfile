@@ -6,6 +6,6 @@ RUN xcaddy build v2.10.0 \
 
 FROM caddy:alpine
 
-ENV CADDY_VERSION=v2.10.0
+ENV CADDY_VERSION=v2.10.1
 
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy
