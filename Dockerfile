@@ -1,4 +1,4 @@
-FROM caddy:builder-alpine AS builder
+FROM caddy/caddy:builder-alpine AS builder
 
 RUN xcaddy build v2.10.2 \
     --with github.com/caddy-dns/ovh \
