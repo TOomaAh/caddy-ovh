@@ -1,4 +1,4 @@
-FROM golang:1.25-alpine3.22
+FROM golang:1.25-alpine3.22 AS builder
 
 RUN apk add --no-cache \
 	ca-certificates \
@@ -37,7 +37,24 @@ RUN xcaddy build v2.10.2 \
     --with github.com/caddy-dns/ovh \
     --with github.com/mholt/caddy-ratelimit
 
-FROM caddy:alpine
+FROM alpine:3.22
+
+RUN apk add --no-cache \
+	ca-certificates \
+	libcap \
+	mailcap
+
+ENV XDG_CONFIG_HOME /config
+ENV XDG_DATA_HOME /data
+
+LABEL org.opencontainers.image.version=v2.10.2
+LABEL org.opencontainers.image.title=Caddy
+LABEL org.opencontainers.image.description="a powerful, enterprise-ready, open source web server with automatic HTTPS written in Go"
+LABEL org.opencontainers.image.url=https://caddyserver.com
+LABEL org.opencontainers.image.documentation=https://caddyserver.com/docs
+LABEL org.opencontainers.image.vendor="Light Code Labs"
+LABEL org.opencontainers.image.licenses=Apache-2.0
+LABEL org.opencontainers.image.source="https://github.com/caddyserver/caddy-docker"
 
 ENV CADDY_VERSION=v2.10.2
 
