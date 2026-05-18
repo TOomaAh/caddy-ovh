@@ -29,8 +29,7 @@ jobs:
       - name: Check current version in Dockerfile
         id: check-version
         run: |
-          # Cherche la version actuelle dans le Dockerfile (format: RUN xcaddy build v2.9.1)
-          CURRENT_VERSION=$(grep "RUN xcaddy build" Dockerfile | awk '{print $3}')
+          CURRENT_VERSION=$(grep "RUN xcaddy build" Dockerfile | awk '{print $4}')
           
           if [ -z "$CURRENT_VERSION" ]; then
             echo "Could not find current version in Dockerfile"
@@ -39,7 +38,6 @@ jobs:
           
           echo "current-version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
           echo "Current version: $CURRENT_VERSION"
-          echo "Latest version: ${{ steps.get-version.outputs.version }}"
 
       - name: Update Dockerfile if needed
         id: update-dockerfile
@@ -72,6 +70,7 @@ jobs:
         if: steps.update-dockerfile.outputs.updated == 'true'
         run: |
           git add Dockerfile
+          git diff --cached --quiet && echo "Nothing to commit" && exit 0
           git commit -m "chore: update Caddy to ${{ steps.get-version.outputs.version }}"
           git push
 
