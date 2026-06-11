@@ -23,13 +23,19 @@ jobs:
         id: get-version
         run: |
           LATEST_VERSION=$(curl -s https://api.github.com/repos/caddyserver/caddy/releases/latest | jq -r '.tag_name')
+          
+          if [ -z "$LATEST_VERSION" ] || [ "$LATEST_VERSION" = "null" ]; then
+            echo "Failed to fetch latest version"
+            exit 1
+          fi
+          
           echo "version=$LATEST_VERSION" >> $GITHUB_OUTPUT
           echo "Latest version: $LATEST_VERSION"
 
       - name: Check current version in Dockerfile
         id: check-version
         run: |
-          CURRENT_VERSION=$(grep "RUN xcaddy build" Dockerfile | awk '{print $4}')
+          CURRENT_VERSION=$(grep "RUN xcaddy build" Dockerfile | grep -oP 'v[0-9]+\.[0-9]+\.[0-9]+')
           
           if [ -z "$CURRENT_VERSION" ]; then
             echo "Could not find current version in Dockerfile"
@@ -44,6 +50,17 @@ jobs:
         run: |
           CURRENT_VERSION="${{ steps.check-version.outputs.current-version }}"
           LATEST_VERSION="${{ steps.get-version.outputs.version }}"
+          
+          # Double guard : les deux doivent être non-vides et ressembler à une version
+          if [ -z "$CURRENT_VERSION" ] || [ -z "$LATEST_VERSION" ]; then
+            echo "ERROR: empty version detected (current='$CURRENT_VERSION', latest='$LATEST_VERSION')"
+            exit 1
+          fi
+          
+          if [[ ! "$LATEST_VERSION" =~ ^v[0-9]+\.[0-9]+ ]]; then
+            echo "ERROR: LATEST_VERSION '$LATEST_VERSION' doesn't look like a version tag"
+            exit 1
+          fi
           
           if [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
             echo "Updating Dockerfile from $CURRENT_VERSION to $LATEST_VERSION"
