@@ -2,9 +2,13 @@ name: Build and Push to GHCR
 
 on:
   push:
-    branches: [ "master" ]  # Changé de main à master
+    branches: [ "master" ]
+    paths:
+      - "Dockerfile"
   pull_request:
     branches: [ "master" ]
+    paths:
+      - "Dockerfile"
 
 env:
   REGISTRY: ghcr.io
