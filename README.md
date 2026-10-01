@@ -8,6 +8,7 @@ Custom Caddy Docker image built automatically with [xcaddy](https://github.com/c
 |--------|-------------|
 | [`caddy-dns/ovh`](https://github.com/caddy-dns/ovh) | DNS-01 challenge via OVH API (useful for wildcard certificates) |
 | [`mholt/caddy-ratelimit`](https://github.com/mholt/caddy-ratelimit) | Native rate limiting in Caddy |
+| [`caddy-maxmind-geolocation`](https://github.com/porech/caddy-maxmind-geolocation) | Caddy v2 module to filter requests based on source IP geographic location |
 
 ## Available images
 
